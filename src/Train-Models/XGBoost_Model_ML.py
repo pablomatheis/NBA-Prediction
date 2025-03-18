@@ -25,6 +25,13 @@ data = data.sort_values(by='Date').reset_index(drop=True)
 # Extract target variable
 margin = data['Home-Team-Win']
 
+# Add winning percentage for home and away teams
+data['Winning-Percentage-Home'] = data['W'] / (data['W'] + data['L'])
+data['Winning-Percentage-Away'] = data['W.1'] / (data['W.1'] + data['L.1'])
+
+# Replace NaN values with 0 for teams with no games played yet (e.g., early in the season)
+data.fillna(0, inplace=True)
+
 # Drop unnecessary columns before training
 data.drop(
     ['Score', 'Home-Team-Win', 'TEAM_NAME', 'Date', 'TEAM_NAME.1', 'Date.1', 'OU-Cover', 'OU'],
@@ -32,7 +39,7 @@ data.drop(
 
 data = data.values.astype(float)
 
-tscv = TimeSeriesSplit(n_splits=12)
+tscv = TimeSeriesSplit(n_splits=8)
 
 
 def objective(config):
@@ -85,14 +92,14 @@ def objective(config):
 def create_search_space():
     config_space = ConfigurationSpace()
     config_space.add_hyperparameters([
-        UniformIntegerHyperparameter('max_depth', lower=3, upper=6),
-        UniformFloatHyperparameter('eta', lower=0.001, upper=0.1, log=True),
-        UniformFloatHyperparameter('subsample', lower=0.1, upper=0.9),
-        UniformFloatHyperparameter('colsample_bytree', lower=0.6, upper=1.0),
-        UniformFloatHyperparameter('gamma', lower=0, upper=1),
+        UniformIntegerHyperparameter('max_depth', lower=3, upper=7),
+        UniformFloatHyperparameter('eta', lower=0.0001, upper=0.1, log=True),
+        UniformFloatHyperparameter('subsample', lower=0.6, upper=0.9),
+        UniformFloatHyperparameter('colsample_bytree', lower=0.7, upper=1.0),
+        UniformFloatHyperparameter('gamma', lower=0.01, upper=0.9),
         UniformIntegerHyperparameter('min_child_weight', lower=3, upper=10),
-        UniformFloatHyperparameter('reg_alpha', lower=0.0001, upper=1),
-        UniformFloatHyperparameter('reg_lambda', lower=0.001, upper=1)
+        UniformFloatHyperparameter('reg_alpha', lower=1, upper=4),
+        UniformFloatHyperparameter('reg_lambda', lower=100, upper=150)
     ])
     return config_space
 
@@ -118,7 +125,7 @@ tuner = tune.Tuner(
         mode="max",
         scheduler=bohb_hyperband,
         search_alg=bohb_search,
-        num_samples=25,
+        num_samples=15,
     )
 )
 
@@ -135,7 +142,7 @@ best_params['objective'] = 'binary:logistic'
 best_params['tree_method'] = 'hist'
 
 # Hold out the most recent season for testing
-test_size = len(data) // 13  # Assuming 12 seasons of data
+test_size = len(data) // 8  # Assuming 12 seasons of data
 x_train, x_test = data[:-test_size], data[-test_size:]
 y_train, y_test = margin.iloc[:-test_size], margin.iloc[-test_size:]
 
